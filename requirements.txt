@@ -1,0 +1,2 @@
+# No third-party packages are required (standard library only).
+# Optional: graphviz (system package) to re-render docs/architecture.dot

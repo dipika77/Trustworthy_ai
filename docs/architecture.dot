@@ -1,0 +1,56 @@
+digraph G {
+  rankdir=TB; nodesep=0.35; ranksep=0.5; fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled", fillcolor="#FFFFFF", color="#555555"];
+  edge [fontname="Helvetica", fontsize=9, color="#555555"];
+
+  user [label="User message", shape=oval, fillcolor="#EEEEEE"];
+
+  subgraph cluster_in {
+    label="INPUT GUARDRAILS  (run on the raw text, independently)"; style="rounded,filled"; fillcolor="#E8F1FB"; color="#6A9BD1"; fontsize=12;
+    inj   [label="Prompt-injection detector\nnormalise + weighted rules\n+ base64 decode, noisy-OR score"];
+    topic [label="Sensitive-topic classifier\n7 categories, priority order"];
+    pii   [label="PII detector\nregex + Luhn + context rules"];
+  }
+
+  policy [label="Input policy\n(decision)", shape=diamond, style=filled, fillcolor="#FFF6D6", color="#C9A227"];
+  crisis [label="CRISIS response\nno LLM call, escalate to human", fillcolor="#FBE3E3", color="#C0504D"];
+  block  [label="BLOCK / REFUSE\nfixed message, no LLM call", fillcolor="#FBE3E3", color="#C0504D"];
+
+  redact [label="PII redaction\n(placeholders such as [EMAIL])"];
+  retr   [label="Retriever\nknowledge base (reference info)"];
+  llm    [label="LLM (mock, pluggable)\nanswers as JSON", fillcolor="#EDE7F6", color="#7E57C2"];
+
+  subgraph cluster_out {
+    label="OUTPUT GUARDRAILS  (per attempt)"; style="rounded,filled"; fillcolor="#E9F6EC"; color="#5BAA6E"; fontsize=12;
+    schema [label="1. Schema validation\nstrict types, enum, ranges"];
+    sens   [label="2. Sensitive-info detection\nPII, secrets, canary, prompt leak"];
+    ground [label="3. Groundedness validation\nclaim coverage, numbers, negation, citations"];
+  }
+
+  fail  [label="Failure handling", shape=diamond, style=filled, fillcolor="#FFF6D6", color="#C9A227"];
+  regen [label="Regenerate once\n(strict mode)"];
+  fallback [label="SAFE FALLBACK\nescalate to support agent", fillcolor="#FBE3E3", color="#C0504D"];
+  redout [label="Redact low-risk PII\nand deliver"];
+  post  [label="Post-processing\ndisclaimers (finance / legal)\nforced escalation (security incident)"];
+  resp  [label="Response to user", shape=oval, fillcolor="#EEEEEE"];
+
+  user -> inj; user -> topic; user -> pii;
+  inj -> policy; topic -> policy; pii -> policy;
+  policy -> crisis [label="self-harm"];
+  policy -> block  [label="injection, illegal,\nviolence, medical"];
+  policy -> redact [label="allowed"];
+  redact -> retr -> llm -> schema -> sens -> ground;
+
+  schema -> fail [label="invalid", style=dashed];
+  sens   -> fail [label="secret / high-risk PII", style=dashed];
+  ground -> fail [label="unsupported", style=dashed];
+  sens   -> redout [label="e-mail / phone", style=dashed];
+  fail -> regen [label="attempt 1"];
+  regen -> llm [style=dashed, constraint=false];
+  fail -> fallback [label="retry exhausted"];
+
+  ground -> post [label="all checks pass"];
+  redout -> ground [style=dashed, constraint=false];
+  post -> resp;
+  crisis -> resp; block -> resp; fallback -> resp;
+}
